@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telco Security Testing Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="/">Telco Testing Tool</a>
+    </nav>
+    <div class="container mt-4">
+        <h1 class="text-center">Telco Security Testing Tool</h1>
+
+        <!-- File Upload -->
+        <form id="uploadForm" method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="fileInput" class="form-label">Upload Target IPs File</label>
+                <input class="form-control" type="file" id="fileInput" name="file">
+            </div>
+            <button type="submit" class="btn btn-primary">Upload File</button>
+        </form>
+
+        <hr />
+
+        <!-- Testing Configuration -->
+        <div class="mt-4">
+            <h2>Testing Configuration</h2>
+            <form id="testForm">
+                <div class="mb-3">
+                    <label for="testMode" class="form-label">Select Test Mode</label>
+                    <select class="form-select" id="testMode">
+                        <option value="all">All Protocols</option>
+                        <option value="diameter">Diameter Protocol</option>
+                        <option value="gtp">GTP Protocol</option>
+                        <option value="sccp">SCCP Protocol</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="msisdn" class="form-label">MSISDN</label>
+                    <input type="text" id="msisdn" class="form-control" placeholder="1234567890">
+                </div>
+                <button type="button" class="btn btn-success" id="startTests">Start Tests</button>
+            </form>
+        </div>
+
+        <hr />
+
+        <!-- Find Telco Targets -->
+        <div class="mt-4">
+            <h2>Find Telco Targets</h2>
+            <button class="btn btn-success" id="startDiscovery">Start Discovery</button>
+            <button class="btn btn-danger" id="stopDiscovery" disabled>Stop Discovery</button>
+        </div>
+
+        <hr />
+
+        <!-- Actions -->
+        <div class="mt-4">
+            <h2>Actions</h2>
+            <button class="btn btn-info" id="checkDependencies">Check Dependencies</button>
+            <button class="btn btn-warning" id="parseResults">Parse Results</button>
+            <button class="btn btn-danger" id="queryShodan">Query Shodan</button>
+            <button class="btn btn-secondary" id="runSCTPScan">Run SCTP Scan</button>
+            <button class="btn btn-primary" id="exportCSV">Export to CSV</button>
+        </div>
+
+        <hr />
+
+        <!-- Results Section -->
+        <div id="results" class="mt-4">
+            <h2>Discovery Results</h2>
+            <div id="resultOutput" class="alert alert-light border" role="alert" style="height: auto; overflow-y: auto;">
+                Results will appear here...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let discoveryInterval;
+
+        // Utility Functions
+        const validateIP = (ip) => {
+            const ipRegex = /^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.((25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.){2}(25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)$/;
+            return ipRegex.test(ip);
+        };
+
+        const validateMSISDN = (msisdn) => {
+            const msisdnRegex = /^[0-9]{10,15}$/;
+            return msisdnRegex.test(msisdn);
+        };
+
+        const createBadge = (text, color) => {
+            const badge = document.createElement("span");
+            badge.className = "badge m-1";
+            badge.style.backgroundColor = color;
+            badge.style.color = "#fff";
+            badge.innerText = text;
+            return badge;
+        };
+
+        const portProtocolMapping = {
+            3868: { protocol: "Diameter", color: "#007bff" }, // Blue
+            2905: { protocol: "M3UA (Sigtran)", color: "#28a745" }, // Green
+            2915: { protocol: "SUA (Sigtran)", color: "#ffc107" }, // Yellow
+            36412: { protocol: "SCTP Heartbeat", color: "#dc3545" }, // Red
+            1812: { protocol: "RADIUS (Diameter Compatibility)", color: "#17a2b8" }, // Teal
+            1813: { protocol: "RADIUS Accounting (Diameter Compatibility)", color: "#e83e8c" }, // Pink
+            3565: { protocol: "M2PA (Sigtran)", color: "#6f42c1" }, // Purple
+            2904: { protocol: "M2UA (Sigtran)", color: "#20c997" }, // Light Green
+            9900: { protocol: "IUA (ISDN User Adaptation)", color: "#fd7e14" }, // Orange
+            2944: { protocol: "H.248/MEGACO", color: "#6c757d" }, // Gray
+            2123: { protocol: "GTP-C (GPRS Tunneling Protocol)", color: "#6610f2" }, // Purple
+            2152: { protocol: "GTP-U (GPRS Tunneling Protocol)", color: "#d39e00" } // Gold
+        };
+
+        const getProtocolColorByPort = (port) => {
+            const mapping = portProtocolMapping[port];
+            return mapping ? mapping.color : "#343a40";
+        };
+
+        const getProtocolNameByPort = (port) => {
+            const mapping = portProtocolMapping[port];
+            return mapping ? mapping.protocol : "Unknown Protocol";
+        };
+
+        // Upload File
+        document.getElementById("uploadForm").onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append("file", document.getElementById("fileInput").files[0]);
+            const response = await fetch("/upload", { method: "POST", body: formData });
+            const result = await response.json();
+            document.getElementById("resultOutput").innerText = JSON.stringify(result, null, 2);
+        };
+
+        // Start Tests
+        document.getElementById("startTests").onclick = async () => {
+            const mode = document.getElementById("testMode").value;
+            const msisdn = document.getElementById("msisdn").value;
+            if (!validateMSISDN(msisdn)) {
+                alert("Invalid MSISDN. Enter 10-15 numeric characters.");
+                return;
+            }
+            const response = await fetch("/run_tests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode, msisdn }),
+            });
+            const result = await response.json();
+            document.getElementById("resultOutput").innerText = JSON.stringify(result, null, 2);
+        };
+
+        // Start Discovery
+        document.getElementById("startDiscovery").onclick = async () => {
+            document.getElementById("startDiscovery").disabled = true;
+            document.getElementById("stopDiscovery").disabled = false;
+            await fetch("/find_telco_targets", { method: "POST" });
+            discoveryInterval = setInterval(async () => {
+                const res = await fetch("/fetch_discovery_output");
+                const text = await res.text();
+                document.getElementById("resultOutput").innerText = text;
+            }, 2000);
+        };
+
+        // Stop Discovery
+        document.getElementById("stopDiscovery").onclick = async () => {
+            document.getElementById("startDiscovery").disabled = false;
+            document.getElementById("stopDiscovery").disabled = true;
+            await fetch("/stop_telco_targets", { method: "POST" });
+            clearInterval(discoveryInterval);
+        };
+
+        // Parse Results
+        document.getElementById("parseResults").onclick = async () => {
+            const response = await fetch("/parse_results", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: "telco-humanreadable.txt" }),
+            });
+            const result = await response.json();
+            const outputContainer = document.getElementById("resultOutput");
+            outputContainer.innerHTML = "";
+
+            if (result.error) {
+                outputContainer.innerHTML = `<div class="alert alert-danger">${result.error}</div>`;
+                return;
+            }
+
+            const table = document.createElement("table");
+            table.className = "table table-striped table-bordered";
+
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>IP Address</th>
+                        <th>Port</th>
+                        <th>Protocols</th>
+                    </tr>
+                </thead>
+            `;
+
+            const tbody = document.createElement("tbody");
+            result.parsed_results.forEach((item) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${item.IP}</td>
+                    <td>${item.Port}</td>
+                `;
+                const protocolCell = document.createElement("td");
+                const protocolName = getProtocolNameByPort(item.Port);
+                protocolCell.appendChild(createBadge(protocolName, getProtocolColorByPort(item.Port)));
+                row.appendChild(protocolCell);
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            outputContainer.appendChild(table);
+        };
+    </script>
+</body>
+</html>
