@@ -188,23 +188,3 @@ Contributions are what make the open-source community such an amazing place to l
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
-## Contact
-
-**Your Name**  
-Project Link: [https://github.com/yourusername/NeoPhreak](https://github.com/yourusername/NeoPhreak)
-
-## Acknowledgments
-
-- [Bootstrap](https://getbootstrap.com/) - For the responsive UI framework.
-- [Leaflet.js](https://leafletjs.com/) - For the interactive geolocation maps.
-- [Shodan](https://www.shodan.io/) - For providing comprehensive internet intelligence.
-- [jsPDF](https://github.com/parallax/jsPDF) - For PDF generation capabilities.
-- [GitHub](https://github.com/) - For hosting the repository and facilitating collaboration.
-
----
-
-## Download NeoPhreak
-
-You can download the latest version of NeoPhreak from the [Releases](https://github.com/scs-labrat/NeoPhreak/releases) page.
-
-[![Download NeoPhreak](https://img.shields.io/badge/Download-NeoPhreak%20v1.0-blue)](https://github.com/scs-labrat/NeoPhreak/releases/download/v1.0/NeoPhreak.zip)
