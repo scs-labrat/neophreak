@@ -188,7 +188,7 @@ def process_telco_line(line):
 
 # Function to query Shodan for a specific target
 def query_shodan(ip):
-    SHODAN_API_KEY = "p0COsOH66eRrG3OfbMohgEsIYbJ3TO6S"
+    SHODAN_API_KEY = ""
     if not SHODAN_API_KEY:
         print(colored("Error: Shodan API key not found in environment variables.", 'red'))
         return
